@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import webbrowser
 import matplotlib.pyplot as plt
 import matplotlib as mpl
@@ -127,32 +128,63 @@ def document_factory(df):
             controls = widgetbox([yselect, xselect, cselect, sslider, aslider])
             return controls
         
-        def make_ts_plot(source, col):
-            ts_args = {
-                'x_axis_type' : 'datetime',
-                'tools' : 'reset,previewsave',
-                'plot_width' : 800,
-                'plot_height' : 400,
-            }
+        def make_ts_combo(source, col):
+
+            def make_ts_plot(source, col):
+                ts_args = {
+                    'x_axis_type' : 'datetime',
+                    'tools' : 'reset,previewsave',
+                    'plot_width' : 800,
+                    'plot_height' : 400,
+                }
         
-            ts = figure(**ts_args)
-            ts.line(x = 'index', y = col, source = source)
-            ts.circle(x = 'index', y = col, source = source)
-            ts.add_tools(BoxSelectTool(dimensions="width"))
-            return ts
+                ts = figure(**ts_args)
+                ts.line(x = 'index', y = col, source = source)
+                ts.circle(x = 'index', y = col, source = source)
+                ts.add_tools(BoxSelectTool(dimensions="width"))
+            
+                return ts
+            
+            def make_histogram(source, col):
+                fig = figure(toolbar_location=None, plot_width = 100, plot_height = 400, x_axis_location=None, y_axis_location=None)
+                fig.xgrid.grid_line_color = None
+                fig.ygrid.grid_line_color = None
+                
+                hist, edges = np.histogram(source.data[col], bins=20)
+                all_quad = fig.quad(left=0, bottom=edges[:-1], top=edges[1:], right=hist, color="white", line_color="#3A5785")
+                sel_quad = fig.quad(left=0, bottom=edges[:-1], top=edges[1:], right=[0]*(len(edges)-1), color="#3A5785", line_color="#3A5785")
+                
+                def update(attr, old, new):
+                    inds = source.selected.indices
+                    
+                    hist, edges = np.histogram(source.data[col], bins=20)
+                    all_quad.data_source.data['right'] = hist
+                    
+                    hist, _ = np.histogram(np.array(source.data[col])[inds], bins=edges)
+                    sel_quad.data_source.data['right'] = hist                
+                
+                source.on_change('selected', update)
+                source.on_change('data', update)
+
+                return fig
+            
+            ts = make_ts_plot(source, col)
+            hist = make_histogram(source, col)
+            
+            return row(ts, hist)
 
 
         TOOLS = "hover,crosshair,pan,wheel_zoom,zoom_in,zoom_out," \
                 "box_zoom,reset,save,box_select,lasso_select,"
 
-        xy = figure(plot_width = 800, plot_height = 800, tools=TOOLS)
+        xy = figure(plot_width = 800, plot_height = 800, tools=TOOLS, active_drag='lasso_select')
         xy.select(LassoSelectTool).select_every_mousemove = False
         xy.circle(x = 'iplot-xvar', y = 'iplot-yvar', fill_color = 'iplot-cvar', line_color = 'iplot-cvar', source = source, name = 'xy_circle')
         
-        ts1 = make_ts_plot(source, 'iplot-xvar')
-        ts2 = make_ts_plot(source, 'iplot-yvar')
-        
         controls = make_controls(source)
+
+        ts1 = make_ts_combo(source, 'iplot-xvar')
+        ts2 = make_ts_combo(source, 'iplot-yvar')
 
         panel = Panel(child = row([controls, xy, column([ts2, ts1])]), title = "Plot View")
         return panel
