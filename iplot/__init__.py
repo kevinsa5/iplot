@@ -4,6 +4,7 @@ import webbrowser
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import pkg_resources
+import sys
 
 from bokeh.layouts import column, row, widgetbox
 from bokeh.models import CustomJS, Button, Select, Slider, PreText
@@ -40,7 +41,10 @@ def document_factory(df):
     def make_about_tab():
         pkg = pkg_resources.require('iplot')[0]
         text = "\n".join(pkg.get_metadata_lines('METADATA'))
+        text += "\n\n"
+        text += "sys.version:" + sys.version
         pretext = PreText(text=text, width=600, height=600)
+        
         panel = Panel(child = widgetbox(pretext), title = "About")
         return panel
 
