@@ -3,10 +3,10 @@ import numpy as np
 import webbrowser
 import matplotlib.pyplot as plt
 import matplotlib as mpl
-
+import pkg_resources
 
 from bokeh.layouts import column, row, widgetbox
-from bokeh.models import CustomJS, Button, Select, Slider
+from bokeh.models import CustomJS, Button, Select, Slider, PreText
 from bokeh.models import Panel, Tabs, Spacer
 from bokeh.models import DataTable, TableColumn
 from bokeh.models import DateFormatter, NumberFormatter, BooleanFormatter, StringFormatter
@@ -36,6 +36,13 @@ def show(df, port=8080):
 
 
 def document_factory(df):
+
+    def make_about_tab():
+        pkg = pkg_resources.require('iplot')[0]
+        text = "\n".join(pkg.get_metadata_lines('METADATA'))
+        pretext = PreText(text=text, width=600, height=600)
+        panel = Panel(child = widgetbox(pretext), title = "About")
+        return panel
 
     def make_table_tab(source):
     
@@ -243,8 +250,9 @@ def document_factory(df):
         
         table = make_table_tab(source)
         plots = make_plots_tab(source)
+        about = make_about_tab()
         
-        tabs = Tabs(tabs = [plots, table])
+        tabs = Tabs(tabs = [plots, table, about])
         doc.add_root(tabs)
         doc.title = "iPlot"
 
