@@ -7,7 +7,7 @@ import matplotlib as mpl
 
 from bokeh.layouts import column, row, widgetbox
 from bokeh.models import CustomJS, Button, Select, Slider
-from bokeh.models import Panel, Tabs 
+from bokeh.models import Panel, Tabs, Spacer
 from bokeh.models import DataTable, TableColumn
 from bokeh.models import DateFormatter, NumberFormatter, BooleanFormatter, StringFormatter
 from bokeh.models import BoxSelectTool, LassoSelectTool
@@ -66,43 +66,46 @@ def document_factory(df):
     def make_plots_tab(source):
     
         def make_controls(source):
+        
+            cols = df.columns.tolist()
+            cols += ['minute', 'hour', 'day', 'month', 'index']
     
             xselect = Select(name = 'iplot-xvar', 
                              title="X-Var:", 
                              value=df.columns[0], 
-                             options=df.columns.tolist())
+                             options=cols)
     
             yselect = Select(name = 'iplot-yvar', 
                              title="Y-Var:", 
                              value=df.columns[1], 
-                             options=df.columns.tolist())
+                             options=cols)
         
             cselect = Select(name = 'iplot-cvar', 
                              title="C-Var:", 
                              value=df.columns[2], 
-                             options=df.columns.tolist())
+                             options=cols)
+
+            rselect = Select(title="R-Var:", 
+                             value="None", 
+                             options=["1d", "1h", "15min", "5min", "None"])
+                             
                              
             sslider = Slider(start=1, end=20, step=1, value=4, title="Marker Size")
             aslider = Slider(start=0, end=255, step=1, value=255, title="Marker Alpha")
-
-        
+            
+            
             def x_callback(attr, old, new):
                 data = source.data
                 data['iplot-xvar'] = data[new]
                 source.data = data
-        
+       
             def y_callback(attr, old, new):
                 data = source.data
                 data['iplot-yvar'] = data[new]
                 source.data = data
                 
             def c_callback(attr, old, new):
-
-                var = df[new]
-                colors = [
-                    "#%02x%02x%02x" % (int(r), int(g), int(b)) 
-                        for r, g, b, _ in 255*plt.cm.viridis(mpl.colors.Normalize()(var.values))
-                ]
+                colors = colormap(source.data[new])
                 data = source.data
                 data['iplot-cvar'] = colors
                 source.data = data
@@ -112,20 +115,28 @@ def document_factory(df):
                 
             def a_callback(attr, old, new):
                 curdoc().get_model_by_name('xy_circle').glyph.fill_alpha = new/255.0
-
+            
+            def r_callback(attr, old, new):
+                if new == "None":
+                    new = None
+                source.selected.indices = []
+                source.data = make_cds(df, new).data
+            
+            
             xselect.on_change('value', x_callback)
             yselect.on_change('value', y_callback)
             cselect.on_change('value', c_callback)
             sslider.on_change('value', s_callback)
             aslider.on_change('value', a_callback)
-            
+            rselect.on_change('value', r_callback)
+                
             data = source.data
             data['iplot-xvar'] = data[xselect.value]
             data['iplot-yvar'] = data[yselect.value]
             source.data = data
             c_callback(None, None, cselect.value)
-        
-            controls = widgetbox([yselect, xselect, cselect, sslider, aslider])
+            
+            controls = widgetbox([yselect, xselect, cselect, rselect, sslider, aslider])
             return controls
         
         def make_ts_combo(source, col):
@@ -156,7 +167,7 @@ def document_factory(df):
                 
                 def update(attr, old, new):
                     inds = source.selected.indices
-                    
+                                        
                     hist, edges = np.histogram(source.data[col], bins=20)
                     all_quad.data_source.data['right'] = hist
                     
@@ -189,15 +200,46 @@ def document_factory(df):
         panel = Panel(child = row([controls, xy, column([ts2, ts1])]), title = "Plot View")
         return panel
 
-
-    def make_document(doc):
+    def make_cds(df, resample_freq):
         # have to build CDS with lists, not pd/np arrays
         # see https://github.com/bokeh/bokeh/issues/7417
+        if resample_freq:
+            aux = df.resample(resample_freq).mean()
+        else:
+            aux = df.copy()
+        
+        aux['minute'] = aux.index.minute
+        aux['hour'] = aux.index.hour
+        aux['day'] = aux.index.day
+        aux['month'] = aux.index.month
+
+        data = {'index' : list(aux.index)}
+        for col in aux.columns:
+            data[col] = list(aux[col])
+        
+        
+        def model(name):
+            return curdoc().get_model_by_name(name)
+        
+        try:
+            data['iplot-xvar'] = data[model('iplot-xvar').value]
+            data['iplot-yvar'] = data[model('iplot-yvar').value]
+            data['iplot-cvar'] = colormap(data[model('iplot-cvar').value])
+        except AttributeError:
+            pass
+        
+        return ColumnDataSource(data)
+
+    def colormap(values):
+        colors = [
+            "#%02x%02x%02x" % (int(r), int(g), int(b)) 
+                for r, g, b, _ in 255*plt.cm.viridis(mpl.colors.Normalize()(values))
+        ]
+        return colors
+
+    def make_document(doc):
         source = ColumnDataSource()
-        data = {'index' : list(df.index)}
-        for col in df.columns:
-            data[col] = list(df[col])
-        source.data = data
+        source.data = make_cds(df, None).data
         
         table = make_table_tab(source)
         plots = make_plots_tab(source)
@@ -205,12 +247,6 @@ def document_factory(df):
         tabs = Tabs(tabs = [plots, table])
         doc.add_root(tabs)
         doc.title = "iPlot"
-
-    df = df.copy()
-    df['minute'] = df.index.minute
-    df['hour'] = df.index.hour
-    df['day'] = df.index.day
-    df['month'] = df.index.month
 
     return make_document
 
