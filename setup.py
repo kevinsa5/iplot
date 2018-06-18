@@ -8,6 +8,6 @@ setup(
     author_email = 'kevinanderso@gmail.com',
     description = 'An interactive tool intended for timeseries data exploration',
     packages = ['iplot'],    
-    install_requires = ['bokeh==0.12.16', 'pandas >= 0.23.1', 'matplotlib >= 2.0.0'],
+    install_requires = ['bokeh==0.12.16', 'pandas', 'matplotlib'],
 )
 
